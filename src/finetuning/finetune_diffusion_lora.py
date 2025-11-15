@@ -17,7 +17,43 @@ import os
 from tqdm import tqdm
 from torchvision import transforms
 from accelerate import Accelerator
+from codecarbon import EmissionsTracker
+from datetime import datetime
+import sys
 import argparse
+
+
+class LogFileWriter:
+    """Redirect stdout/stderr to both console and log file"""
+    def __init__(self, log_file, mode='a'):
+        self.terminal = sys.stdout
+        self.log = open(log_file, mode)
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        self.log.close()
+
+
+def setup_logging(log_dir, script_name):
+    """Setup logging to file"""
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_file = os.path.join(log_dir, f'{script_name}_{timestamp}.log')
+
+    # Redirect stdout and stderr
+    log_writer = LogFileWriter(log_file, 'w')
+    sys.stdout = log_writer
+    sys.stderr = log_writer
+
+    return log_file, log_writer
 
 
 class ChestXRayDataset(Dataset):
@@ -94,11 +130,12 @@ def train(
     max_samples=10000,
     lora_rank=8,
     lora_alpha=16,
-    lora_dropout=0.1
+    lora_dropout=0.1,
+    log_dir='.'
 ):
     """
     Fine-tune diffusion model for chest X-ray generation using LoRA
-    
+
     Args:
         csv_file: Path to diffusion_finetune.csv
         image_root: Root directory containing organized images
@@ -115,8 +152,26 @@ def train(
         lora_rank: LoRA rank (8 or 16 recommended)
         lora_alpha: LoRA alpha (typically 2*rank)
         lora_dropout: LoRA dropout probability
+        log_dir: Directory to save log files and emissions data
     """
-    
+
+    # Setup logging
+    log_file, log_writer = setup_logging(log_dir, 'diffusion_lora_finetuning')
+    print(f"Logging to: {log_file}")
+
+    # Initialize emission tracker
+    tracker = EmissionsTracker(
+        project_name="Diffusion_LoRA_Finetuning",
+        output_dir=log_dir,
+        output_file=f'diffusion_finetuning_emissions_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+        log_level='warning'
+    )
+
+    print("\n" + "="*70)
+    print("Starting CO2 emission tracking for diffusion fine-tuning...")
+    print("="*70)
+    tracker.start()
+
     # Initialize accelerator
     accelerator = Accelerator(
         gradient_accumulation_steps=gradient_accumulation_steps,
@@ -372,10 +427,30 @@ def train(
         print("\nTo use this model for inference:")
         print(f"  1. Load base model: StableDiffusionPipeline.from_pretrained('{base_model}')")
         print(f"  2. Load LoRA weights: PeftModel.from_pretrained(unet, '{final_path}')")
-    
+
+    # Stop emission tracking
+    finetuning_emissions = tracker.stop()
+    print("\n" + "="*70)
+    print(f"Fine-tuning CO2 Emissions: {finetuning_emissions:.6f} kg")
+    print("="*70)
+
+    # Save emissions to final metadata
+    if accelerator.is_main_process:
+        metadata_path = os.path.join(final_path, 'metadata.json')
+        if os.path.exists(metadata_path):
+            import json
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            metadata['finetuning_co2_kg'] = float(finetuning_emissions)
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
     print("\n" + "="*60)
     print("Training complete!")
     print("="*60)
+
+    # Close log writer
+    log_writer.close()
 
 
 def main():
@@ -415,7 +490,9 @@ def main():
                        help='LoRA alpha (typically 2*rank)')
     parser.add_argument('--lora_dropout', type=float, default=0.1,
                        help='LoRA dropout probability')
-    
+    parser.add_argument('--log_dir', type=str, default='.',
+                       help='Directory to save log files and emissions data (default: current directory)')
+
     args = parser.parse_args()
     
     # Convert 0 to None for max_samples
@@ -436,7 +513,8 @@ def main():
         max_samples=max_samples,
         lora_rank=args.lora_rank,
         lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout
+        lora_dropout=args.lora_dropout,
+        log_dir=args.log_dir
     )
 
 

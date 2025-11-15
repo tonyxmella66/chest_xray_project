@@ -7,9 +7,45 @@ This script loads a LoRA fine-tuned model and generates chest X-ray images.
 import torch
 from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
 from peft import PeftModel
+from codecarbon import EmissionsTracker
+from datetime import datetime
+import sys
 import argparse
 import os
 import json
+
+
+class LogFileWriter:
+    """Redirect stdout/stderr to both console and log file"""
+    def __init__(self, log_file, mode='a'):
+        self.terminal = sys.stdout
+        self.log = open(log_file, mode)
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        self.log.close()
+
+
+def setup_logging(log_dir, script_name):
+    """Setup logging to file"""
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_file = os.path.join(log_dir, f'{script_name}_{timestamp}.log')
+
+    # Redirect stdout and stderr
+    log_writer = LogFileWriter(log_file, 'w')
+    sys.stdout = log_writer
+    sys.stderr = log_writer
+
+    return log_file, log_writer
 
 
 def load_lora_model(base_model_path, lora_weights_path, device='cuda'):
@@ -82,11 +118,12 @@ def generate_images(
     height=512,
     width=512,
     output_dir='generated_xrays',
-    seed=None
+    seed=None,
+    log_dir='.'
 ):
     """
     Generate images using the loaded pipeline
-    
+
     Args:
         pipeline: Loaded StableDiffusionPipeline with LoRA
         prompt: Text prompt for generation
@@ -98,8 +135,22 @@ def generate_images(
         width: Image width
         output_dir: Directory to save generated images
         seed: Random seed (None for random)
+        log_dir: Directory to save log files and emissions data
     """
     os.makedirs(output_dir, exist_ok=True)
+
+    # Initialize emission tracker for generation
+    tracker = EmissionsTracker(
+        project_name="Diffusion_Image_Generation",
+        output_dir=log_dir,
+        output_file=f'diffusion_generation_emissions_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+        log_level='warning'
+    )
+
+    print("\n" + "="*70)
+    print("Starting CO2 emission tracking for image generation...")
+    print("="*70)
+    tracker.start()
     
     # Set seed if provided
     if seed is not None:
@@ -130,7 +181,13 @@ def generate_images(
         output_path = os.path.join(output_dir, f'generated_xray_{i+1:03d}.png')
         image.save(output_path)
         print(f"✓ Saved: {output_path}")
-    
+
+    # Stop emission tracking
+    generation_emissions = tracker.stop()
+    print("\n" + "="*70)
+    print(f"Image Generation CO2 Emissions: {generation_emissions:.6f} kg")
+    print("="*70)
+
     print(f"\n✓ All {num_images} images generated successfully!")
     print(f"✓ Images saved to: {output_dir}")
 
@@ -167,16 +224,22 @@ def main():
     parser.add_argument('--device', type=str, default='cuda',
                        choices=['cuda', 'cpu'],
                        help='Device to run inference on')
-    
+    parser.add_argument('--log_dir', type=str, default='.',
+                       help='Directory to save log files and emissions data (default: current directory)')
+
     args = parser.parse_args()
-    
+
+    # Setup logging
+    log_file, log_writer = setup_logging(args.log_dir, 'diffusion_lora_generation')
+    print(f"Logging to: {log_file}")
+
     # Load model
     pipeline = load_lora_model(
         base_model_path=args.base_model,
         lora_weights_path=args.lora_weights,
         device=args.device
     )
-    
+
     # Generate images
     generate_images(
         pipeline=pipeline,
@@ -188,8 +251,12 @@ def main():
         height=args.height,
         width=args.width,
         output_dir=args.output_dir,
-        seed=args.seed
+        seed=args.seed,
+        log_dir=args.log_dir
     )
+
+    # Close log writer
+    log_writer.close()
 
 
 if __name__ == '__main__':
