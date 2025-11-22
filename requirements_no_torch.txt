@@ -1,0 +1,14 @@
+diffusers
+transformers
+accelerate
+hf_transfer
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+tqdm
+pillow
+peft
+codecarbon
+awscli
