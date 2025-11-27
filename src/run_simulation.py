@@ -311,7 +311,8 @@ def run_augmented_experiments(data_size, random_seed, run_number, total_runs,
                 generated_paths=generated_paths,
                 target_feature=TARGET_FEATURE,
                 target_value=1.0,  # Positive pleural effusion
-                output_csv=synthetic_csv
+                output_csv=synthetic_csv,
+                data_root=DATA_ROOT
             )
 
             # Create augmented training set
@@ -498,7 +499,8 @@ def run_finetuned_experiments(data_size, random_seed, run_number, total_runs,
                     generated_paths=generated_paths,
                     target_feature=TARGET_FEATURE,
                     target_value=1.0,
-                    output_csv=synthetic_csv
+                    output_csv=synthetic_csv,
+                    data_root=DATA_ROOT
                 )
 
                 # Create augmented training set

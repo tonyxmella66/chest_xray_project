@@ -235,7 +235,7 @@ def generate_synthetic_images(
     return generated_paths, generation_emissions
 
 
-def create_synthetic_csv(generated_paths, target_feature, target_value, output_csv):
+def create_synthetic_csv(generated_paths, target_feature, target_value, output_csv, data_root=None):
     """
     Create a CSV file for generated images with target labels
 
@@ -244,14 +244,37 @@ def create_synthetic_csv(generated_paths, target_feature, target_value, output_c
         target_feature (str): Name of the target feature
         target_value (float): Value for the target feature (0.0 or 1.0)
         output_csv (str): Path to save the CSV file
+        data_root (str): Root directory to make paths relative to (if None, uses absolute paths)
 
     Returns:
         pd.DataFrame: DataFrame with generated image paths and labels
     """
+    # Make paths relative to data_root if provided
+    if data_root is not None:
+        # Normalize data_root path
+        data_root = os.path.normpath(data_root)
+
+        # Make each path relative to data_root
+        relative_paths = []
+        for path in generated_paths:
+            norm_path = os.path.normpath(path)
+            # Remove data_root prefix if present
+            if norm_path.startswith(data_root + os.sep):
+                rel_path = norm_path[len(data_root) + len(os.sep):]
+            elif norm_path.startswith(data_root):
+                rel_path = norm_path[len(data_root):].lstrip(os.sep)
+            else:
+                rel_path = norm_path
+            relative_paths.append(rel_path)
+
+        paths_to_save = relative_paths
+    else:
+        paths_to_save = generated_paths
+
     # Create DataFrame with paths and label
     data = {
-        'Path': generated_paths,
-        target_feature: [target_value] * len(generated_paths)
+        'Path': paths_to_save,
+        target_feature: [target_value] * len(paths_to_save)
     }
 
     df = pd.DataFrame(data)

@@ -57,7 +57,7 @@ NUMPY_SEED = 42
 
 # Image generation parameters
 BASE_DIFFUSION_MODEL = "runwayml/stable-diffusion-v1-5"
-GENERATION_OUTPUT_DIR = "./generated_data"
+GENERATION_OUTPUT_DIR = "./new_data/generated_data"
 GENERATION_PROMPT = "posterior-anterior chest X-ray, diagnostic grayscale radiograph, showing right pleural effusion, balanced exposure, no text or labels"
 GENERATION_NEGATIVE_PROMPT = "text, labels, watermark, logo, patient name, annotation, letters, numbers, gridlines, ultrasound, CT, MRI, PET, colored image, chest tube, ECG leads, external devices, border, frame, unrealistic anatomy, blur, overexposure, underexposure, distortion, duplicate organs"
 GENERATION_NUM_INFERENCE_STEPS = 30
